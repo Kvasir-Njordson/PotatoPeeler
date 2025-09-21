@@ -6,8 +6,10 @@ import indi.somebottle.exceptions.RegionFileNotFoundException;
 import indi.somebottle.exceptions.RegionTaskInterruptedException;
 import indi.somebottle.logger.GlobalLogger;
 import indi.somebottle.utils.*;
+import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.HashMap;
 import java.util.List;
@@ -42,6 +44,23 @@ public class Main {
             GlobalLogger.warning("Use 'java -jar PotatoPeeler.jar --help' to get help on usage.");
             System.exit(1);
         }
+
+        // Load configuration from potatopeeler.yml
+        Configuration config = new Configuration();
+        try (InputStream inputStream = Main.class.getClassLoader().getResourceAsStream("potatopeeler.yml")) {
+            if (inputStream == null) {
+                throw new IOException("potatopeeler.yml not found in classpath.");
+            }
+            Yaml yaml = new Yaml();
+            config = yaml.loadAs(inputStream, Configuration.class);
+            GlobalLogger.info("Configuration loaded from potatopeeler.yml. minCreationHours: " + config.getMinCreationHours());
+        } catch (IOException e) {
+            GlobalLogger.warning("Could not load potatopeeler.yml, using default configuration. Error: " + e.getMessage());
+            // Set default values if config file is not found or cannot be read
+            config.setMinCreationHours(24); // Default value
+        }
+
+
         // 可能只需要打印帮助信息
         boolean helpNeeded = peelerArgs.containsKey("--help");
         if (helpNeeded) {
@@ -170,7 +189,7 @@ public class Main {
                 try {
                     GlobalLogger.info(">>> Processing '" + worldDirPath + "' ...");
                     // 开始对这个世界执行处理
-                    PeelResult peelResult = Potato.peel(worldDirPath, outputDirPath, threadsNum, minInhabited, dryRun);
+                    PeelResult peelResult = Potato.peel(worldDirPath, outputDirPath, threadsNum, minInhabited, dryRun, config.getMinCreationHours());
                     GlobalLogger.info("=========== WORLD RESULT ============");
                     GlobalLogger.info("World: " + worldDirPath);
                     GlobalLogger.info("Time elapsed: " + (double) peelResult.getTimeElapsed() / 1000D + "s");

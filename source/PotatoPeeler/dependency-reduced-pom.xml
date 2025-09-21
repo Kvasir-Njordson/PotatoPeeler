@@ -7,13 +7,6 @@
   <build>
     <plugins>
       <plugin>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
-        <configuration>
-          <release>${javaVersion}</release>
-        </configuration>
-      </plugin>
-      <plugin>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.6.0</version>
         <executions>
@@ -28,50 +21,13 @@
                   <mainClass>indi.somebottle.Main</mainClass>
                 </transformer>
               </transformers>
-              <finalName>PotatoPeeler-${project.version}-java${javaVersion}</finalName>
+              <finalName>PotatoPeeler-${project.version}</finalName>
             </configuration>
           </execution>
         </executions>
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>java8</id>
-      <properties>
-        <javaVersion>8</javaVersion>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      </properties>
-    </profile>
-    <profile>
-      <id>java11</id>
-      <properties>
-        <javaVersion>11</javaVersion>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      </properties>
-    </profile>
-    <profile>
-      <id>java16</id>
-      <properties>
-        <javaVersion>16</javaVersion>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      </properties>
-    </profile>
-    <profile>
-      <id>java17</id>
-      <properties>
-        <javaVersion>17</javaVersion>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      </properties>
-    </profile>
-    <profile>
-      <id>java21</id>
-      <properties>
-        <javaVersion>21</javaVersion>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-      </properties>
-    </profile>
-  </profiles>
   <dependencies>
     <dependency>
       <groupId>junit</groupId>
@@ -86,4 +42,9 @@
       </exclusions>
     </dependency>
   </dependencies>
+  <properties>
+    <maven.compiler.target>21</maven.compiler.target>
+    <maven.compiler.source>21</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
 </project>

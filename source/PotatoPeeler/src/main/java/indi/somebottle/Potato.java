@@ -19,6 +19,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Potato {
     /**
@@ -42,18 +48,45 @@ public class Potato {
      * @throws RegionTaskAlreadyStartedException 任务重复启动时抛出
      * @throws IOException                       读取文件时可能抛出
      */
-    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
+    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun, int minCreationHours) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
         // 先检查世界目录下的区域文件目录是否存在
         Path regionDirPath = RegionUtils.findRegionDirPath(worldPathStr);
         if (regionDirPath == null) {
             // 没有找到区域文件所在目录
             throw new RegionFileNotFoundException("Can not find region directory in " + worldPathStr);
         }
-        // 扫描目录下的 .mca 文件
-        File[] mcaFiles = regionDirPath.toFile().listFiles(file -> file.getName().endsWith(".mca"));
-        if (mcaFiles == null || mcaFiles.length == 0) {
-            // 没有找到 .mca 文件
+
+        // Calculate the cutoff time for creation (minCreationHours ago)
+        Instant minCreationInstant = Instant.now().minus(minCreationHours, ChronoUnit.HOURS);
+        FileTime minCreationFileTime = FileTime.from(minCreationInstant);
+
+        // Scan for .mca files, now including a check for creation time
+        File[] allMcaFilesInDir = regionDirPath.toFile().listFiles(file -> file.getName().endsWith(".mca"));
+        if (allMcaFilesInDir == null || allMcaFilesInDir.length == 0) {
             throw new RegionFileNotFoundException("Can not find .mca files in " + regionDirPath);
+        }
+
+        List<File> filteredMcaFiles = new ArrayList<>();
+        for (File mcaFile : allMcaFilesInDir) {
+            try {
+                BasicFileAttributes attrs = Files.readAttributes(mcaFile.toPath(), BasicFileAttributes.class);
+                FileTime creationTime = attrs.creationTime();
+
+                // Only include .mca files that were created more than minCreationHours ago
+                if (creationTime.compareTo(minCreationFileTime) < 0) {
+                    filteredMcaFiles.add(mcaFile);
+                } else {
+                    GlobalLogger.fine("Skipping region file " + mcaFile.getName() + " as it was created within the last " + minCreationHours + " hours.");
+                }
+            } catch (IOException e) {
+                GlobalLogger.warning("Could not read file attributes for " + mcaFile.getAbsolutePath() + ", skipping.", e);
+            }
+        }
+
+        File[] mcaFiles = filteredMcaFiles.toArray(new File[0]);
+
+        if (mcaFiles.length == 0) {
+            throw new RegionFileNotFoundException("No .mca files found in " + regionDirPath + " that were created more than " + minCreationHours + " hours ago.");
         }
         // 找到世界维度根目录下的受保护区块清单
         Path protectedChunksListPath = regionDirPath.resolveSibling(PROTECTED_CHUNKS_LIST_FILENAME);
