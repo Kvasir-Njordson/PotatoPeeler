@@ -20,17 +20,10 @@ public class ArgsUtils {
     // 初始化参数
     static {
         // Minecraft 服务器世界目录路径，可以有多个（逗号分隔）
-        PEELER_ARGS.put("--world-dirs", true);
-        // 输出的世界目录路径，可以有多个，必须和 --world-dirs 的目录数量一致（逗号分隔）
-        PEELER_ARGS.put("--output-dirs", true);
-        // Minecraft 服务端 jar 包路径
+        // Path to the potatopeeler.yml configuration file
+        PEELER_ARGS.put("--config-file", true);
+        // Minecraft 服务端 jar 包路径 (now primarily from YAML, but kept for CLI override)
         PEELER_ARGS.put("--server-jar", true);
-        // InhabitedTime 阈值，低于此值的区块会被移除，单位：tick
-        PEELER_ARGS.put("--min-inhabited", true);
-        // 处理间隔时间，单位：分钟
-        PEELER_ARGS.put("--cool-down", true);
-        // 处理时采用的线程数
-        PEELER_ARGS.put("--threads-num", true);
         // 每个日志文件的最大大小(字节)
         PEELER_ARGS.put("--max-log-size", true);
         // 日志文件的最大数量
@@ -41,7 +34,14 @@ public class ArgsUtils {
         PEELER_ARGS.put("--skip-peeler", false);
         // 让程序打印使用信息
         PEELER_ARGS.put("--help", false);
-        // 试运行选项
+        // The following are now primarily configured per task in potatopeeler.yml,
+        // but are kept in PEELER_ARGS for backward compatibility when no tasks are defined in YAML.
+        // They will be parsed by Main.java's fallback logic.
+        PEELER_ARGS.put("--world-dirs", true);
+        PEELER_ARGS.put("--output-dirs", true);
+        PEELER_ARGS.put("--min-inhabited", true);
+        PEELER_ARGS.put("--cool-down", true);
+        PEELER_ARGS.put("--threads-num", true);
         PEELER_ARGS.put("--dry-run", false);
     }
 
@@ -95,49 +95,20 @@ public class ArgsUtils {
      * @return 是否合法
      */
     public static boolean checkPeelerArgs(HashMap<String, String> peelerArgs) {
-        // 需要接收数字的参数无法被解析成数字则参数无效
-        if (!CheckUtils.isInt(peelerArgs.get("--min-inhabited"))) {
-            GlobalLogger.warning("PotatoPeeler parameter --min-inhabited must be an integer.");
-            return false;
-        }
-        if (Long.parseLong(peelerArgs.get("--min-inhabited")) < 0) {
-            // 不能小于 0
-            GlobalLogger.warning("PotatoPeeler parameter --min-inhabited must be >= 0.");
-            return false;
-        }
-        if (!CheckUtils.isInt(peelerArgs.get("--cool-down"))) {
-            GlobalLogger.warning("PotatoPeeler parameter --cool-down must be an integer.");
-            return false;
-        }
-        if (Long.parseLong(peelerArgs.get("--cool-down")) < 0) {
-            // 不能小于 0
-            GlobalLogger.warning("PotatoPeeler parameter --cool-down must be >= 0.");
-            return false;
-        }
-        if (!CheckUtils.isInt(peelerArgs.get("--threads-num"))) {
-            GlobalLogger.warning("PotatoPeeler parameter --threads-num must be an integer.");
-            return false;
-        }
-        if (Long.parseLong(peelerArgs.get("--threads-num")) < 1) {
-            // 不能小于 1
-            GlobalLogger.warning("PotatoPeeler parameter --threads-num must be >= 1.");
-            return false;
-        }
-        if (!CheckUtils.isInt(peelerArgs.get("--max-log-size"))) {
+        // Only validate global command-line args here. Task-specific args are validated when tasks are processed.
+        if (peelerArgs.containsKey("--max-log-size") && !CheckUtils.isInt(peelerArgs.get("--max-log-size"))) {
             GlobalLogger.warning("PotatoPeeler parameter --max-log-size must be an integer.");
             return false;
         }
-        if (Long.parseLong(peelerArgs.get("--max-log-size")) < 0) {
-            // 不能小于 0
+        if (peelerArgs.containsKey("--max-log-size") && Long.parseLong(peelerArgs.get("--max-log-size")) < 0) {
             GlobalLogger.warning("PotatoPeeler parameter --max-log-size must be >= 0.");
             return false;
         }
-        if (!CheckUtils.isInt(peelerArgs.get("--retain-log-files"))) {
+        if (peelerArgs.containsKey("--retain-log-files") && !CheckUtils.isInt(peelerArgs.get("--retain-log-files"))) {
             GlobalLogger.warning("PotatoPeeler parameter --retain-log-files must be an integer.");
             return false;
         }
-        if (Long.parseLong(peelerArgs.get("--retain-log-files")) < 1) {
-            // 不能小于 1
+        if (peelerArgs.containsKey("--retain-log-files") && Long.parseLong(peelerArgs.get("--retain-log-files")) < 1) {
             GlobalLogger.warning("PotatoPeeler parameter --retain-log-files must be >= 1.");
             return false;
         }
@@ -150,33 +121,16 @@ public class ArgsUtils {
      * @param peelerArgs PotatoPeeler 参数 Map
      */
     public static void setDefaultPeelerArgs(HashMap<String, String> peelerArgs) {
-        // 如果没有设定 minInhabited，默认为 0
-        if (!peelerArgs.containsKey("--min-inhabited")) {
-            peelerArgs.put("--min-inhabited", "0");
-        }
-        // 如果没有设定 cool-down，则默认为 0
-        if (!peelerArgs.containsKey("--cool-down")) {
-            peelerArgs.put("--cool-down", "0");
-        }
-        // 如果没有指定线程数，默认为 10
-        if (!peelerArgs.containsKey("--threads-num")) {
-            peelerArgs.put("--threads-num", "10");
-        }
-        // 如果没有指定世界路径，默认为空
-        if (!peelerArgs.containsKey("--world-dirs")) {
-            peelerArgs.put("--world-dirs", "");
-        }
-        // 如果没有指定输出路径，默认为空
-        if (!peelerArgs.containsKey("--output-dirs")) {
-            peelerArgs.put("--output-dirs", "");
-        }
-        // 如果没有指定保存日志文件的大小，默认为 2 MiB
+        // Only set defaults for global command-line args here. Task-specific args are handled by Main.java's fallback.
         if (!peelerArgs.containsKey("--max-log-size")) {
             peelerArgs.put("--max-log-size", "2097152");
         }
-        // 如果没有指定日志文件的最大数量，默认为 10
         if (!peelerArgs.containsKey("--retain-log-files")) {
             peelerArgs.put("--retain-log-files", "10");
+        }
+        // Default for --config-file
+        if (!peelerArgs.containsKey("--config-file")) {
+            peelerArgs.put("--config-file", "potatopeeler.yml");
         }
     }
 
