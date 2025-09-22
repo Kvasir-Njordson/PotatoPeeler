@@ -13,6 +13,9 @@ import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.HashMap;
 import java.util.List;
+import indi.somebottle.entities.PeelingTaskConfig;
+import java.io.FileInputStream;
+import java.io.File;
 
 public class Main {
     public static void main(String[] args) {
@@ -47,17 +50,16 @@ public class Main {
 
         // Load configuration from potatopeeler.yml
         Configuration config = new Configuration();
-        try (InputStream inputStream = Main.class.getClassLoader().getResourceAsStream("potatopeeler.yml")) {
-            if (inputStream == null) {
-                throw new IOException("potatopeeler.yml not found in classpath.");
-            }
+        String configFilePath = peelerArgs.getOrDefault("--config-file", "potatopeeler.yml"); // Default to potatopeeler.yml in current dir
+        try (InputStream inputStream = new FileInputStream(new File(configFilePath))) {
             Yaml yaml = new Yaml();
             config = yaml.loadAs(inputStream, Configuration.class);
-            GlobalLogger.info("Configuration loaded from potatopeeler.yml. minCreationHours: " + config.getMinCreationHours());
+            GlobalLogger.info("Configuration loaded from " + configFilePath + ".");
         } catch (IOException e) {
-            GlobalLogger.warning("Could not load potatopeeler.yml, using default configuration. Error: " + e.getMessage());
-            // Set default values if config file is not found or cannot be read
-            config.setMinCreationHours(24); // Default value
+            GlobalLogger.warning("Could not load configuration from " + configFilePath + ", using default configuration. Error: " + e.getMessage());
+            // If config file is not found or cannot be read, initialize with empty task list and default cooldown
+            config.setPeelingTasks(List.of()); // No tasks by default
+            config.setCoolDown(0); // No cooldown by default
         }
 
 
@@ -94,142 +96,158 @@ public class Main {
             System.exit(1);
         }
         // 解析参数值
-        List<String> worldDirPaths = ArgsUtils.parseWorldDirs(peelerArgs.get("--world-dirs"));
-        List<String> outputDirPaths = ArgsUtils.parseWorldDirs(peelerArgs.get("--output-dirs"));
-        long minInhabited = Long.parseLong(peelerArgs.get("--min-inhabited"));
-        long coolDown = Long.parseLong(peelerArgs.get("--cool-down"));
-        int threadsNum = Integer.parseInt(peelerArgs.get("--threads-num"));
-        int maxLogSize = Integer.parseInt(peelerArgs.get("--max-log-size"));
-        int retainLogFiles = Integer.parseInt(peelerArgs.get("--retain-log-files"));
-        boolean dryRun = peelerArgs.containsKey("--dry-run");
+        // Global parameters from command line (if provided)
+        int maxLogSize = Integer.parseInt(peelerArgs.getOrDefault("--max-log-size", "2097152")); // Default 2MB
+        int retainLogFiles = Integer.parseInt(peelerArgs.getOrDefault("--retain-log-files", "10")); // Default 10 files
         boolean skipPeeler = peelerArgs.containsKey("--skip-peeler");
-        // 配置日志文件记录器
+
+        // Configure logger
         GlobalLogger.resetLogFileHandler(maxLogSize, retainLogFiles);
-        // 列出 PotatoPeeler 相关的参数
-        GlobalLogger.info("====== POTATO-PEELER PARAMS ======");
-        GlobalLogger.info("Min inhabited time (tick): " + minInhabited);
-        GlobalLogger.info("Cool down (min): " + coolDown);
-        GlobalLogger.info("Worker threads num: " + threadsNum);
+
+        // List global parameters
+        GlobalLogger.info("====== POTATO-PEELER GLOBAL PARAMS ======");
+        GlobalLogger.info("Max log size: " + maxLogSize);
+        GlobalLogger.info("Retain log files: " + retainLogFiles);
         GlobalLogger.info("Verbose output: " + verboseOutput);
-        GlobalLogger.info("Dry run: " + dryRun);
         GlobalLogger.info("Skip peeler: " + skipPeeler);
-        GlobalLogger.info("World dir paths: ");
-        for (String worldDirPath : worldDirPaths) {
-            GlobalLogger.info("\t" + worldDirPath);
+        GlobalLogger.info("=========================================");
+
+        // If no tasks are defined in config, use command-line args for a single task
+        if (config.getPeelingTasks() == null || config.getPeelingTasks().isEmpty()) {
+            GlobalLogger.info("No peeling tasks defined in potatopeeler.yml. Attempting to use command-line arguments for a single task.");
+            // Re-parse command-line args for single task compatibility
+            List<String> worldDirPaths = ArgsUtils.parseWorldDirs(peelerArgs.get("--world-dirs"));
+            List<String> outputDirPaths = ArgsUtils.parseWorldDirs(peelerArgs.get("--output-dirs"));
+            long minInhabited = Long.parseLong(peelerArgs.getOrDefault("--min-inhabited", "0"));
+            long coolDownArg = Long.parseLong(peelerArgs.getOrDefault("--cool-down", "0"));
+            int threadsNum = Integer.parseInt(peelerArgs.getOrDefault("--threads-num", "10"));
+            boolean dryRunArg = peelerArgs.containsKey("--dry-run");
+            int minCreationHoursArg = 0; // Default to 0 for command-line single task
+
+            // Create a single PeelingTaskConfig from command-line args
+            PeelingTaskConfig singleTask = new PeelingTaskConfig(
+                    "Default Command-Line Task",
+                    "chunk_level_deletion", // Default mode for command-line
+                    minInhabited,
+                    minCreationHoursArg,
+                    dryRunArg,
+                    peelerArgs.get("--world-dirs"),
+                    peelerArgs.get("--output-dirs"),
+                    threadsNum,
+                    verboseOutput
+            );
+            config.setPeelingTasks(List.of(singleTask));
+            config.setCoolDown(coolDownArg);
         }
-        if (outputDirPaths.isEmpty()) {
-            GlobalLogger.info("In-place operation: true");
-        } else {
-            GlobalLogger.info("In-place operation: false");
-            GlobalLogger.info("Output world dir paths: ");
-            for (String outputDirPath : outputDirPaths) {
-                GlobalLogger.info("\t" + outputDirPath);
+
+        // Check if output paths count matches world paths count for each task
+        for (PeelingTaskConfig task : config.getPeelingTasks()) {
+            List<String> taskWorldDirPaths = ArgsUtils.parseWorldDirs(task.getWorldDirs());
+            List<String> taskOutputDirPaths = ArgsUtils.parseWorldDirs(task.getOutputDirs());
+            if (!taskOutputDirPaths.isEmpty() && taskOutputDirPaths.size() != taskWorldDirPaths.size()) {
+                GlobalLogger.severe("The number of output paths (current: " + taskOutputDirPaths.size() + ") must be equal to the number of world paths (" + taskWorldDirPaths.size() + ") for task '" + task.getName() + "'.");
+                System.exit(1);
             }
         }
-        GlobalLogger.info("==================================");
-        // 检查输出路径个数是否和世界路径个数一致
-        if (!outputDirPaths.isEmpty() && outputDirPaths.size() != worldDirPaths.size()) {
-            // 如果不一致则抛出异常
-            GlobalLogger.severe("The number of output paths (current: " + outputDirPaths.size() + ") must be equal to the number of world paths (" + worldDirPaths.size() + ").");
-            System.exit(1);
-        }
-        // 在 minInhabited > 200 时发出警告
-        if (minInhabited > 200) {
-            GlobalLogger.warning("****** WARNING ******");
-            GlobalLogger.warning("You are setting 'minInhabited' to a value greater than 200 ticks (10 seconds).");
-            GlobalLogger.warning("This may cause some chunks to be removed even if they are currently in use.");
-            GlobalLogger.warning("Please make sure you know what you are doing.");
-            GlobalLogger.warning("*********************");
-            // 20 秒冷静期
-            GlobalLogger.warning("The program will continue in 20 seconds.");
-            try {
-                Thread.sleep(20000);
-            } catch (InterruptedException e) {
-                // 如果线程被中断，则退出程序
-                System.exit(0);
+
+        // In minInhabited > 200 warning (now per task)
+        for (PeelingTaskConfig task : config.getPeelingTasks()) {
+            if (task.getMinInhabited() > 200) {
+                GlobalLogger.warning("****** WARNING (Task: " + task.getName() + ") ******");
+                GlobalLogger.warning("You are setting 'minInhabited' to a value greater than 200 ticks (10 seconds).");
+                GlobalLogger.warning("This may cause some chunks to be removed even if they are currently in use.");
+                GlobalLogger.warning("Please make sure you know what you are doing.");
+                GlobalLogger.warning("*********************");
+                // 20 秒冷静期
+                GlobalLogger.warning("The program will continue in 20 seconds.");
+                try {
+                    Thread.sleep(20000);
+                } catch (InterruptedException e) {
+                    System.exit(0);
+                }
+                break; // Only warn once for the first task that triggers it
             }
         }
-        // 计算自上次运行过去了多久
+
+        // Calculate time since last run
         long timeSinceLastRun = TimeUtils.timeNow() - TimeUtils.getLastRunTime();
-        if (worldDirPaths.isEmpty()) {
-            // 没有世界可处理，则跳过 Peeler
+        if (config.getPeelingTasks().isEmpty()) {
             GlobalLogger.info("====== POTATO-PEELER SKIPPED ======");
-            GlobalLogger.info("No world to process.");
+            GlobalLogger.info("No peeling tasks defined or no world to process.");
         } else if (skipPeeler) {
-            // 指定了跳过
             GlobalLogger.info("====== POTATO-PEELER SKIPPED ======");
-            GlobalLogger.info("Skipped.");
-        } else if (timeSinceLastRun <= coolDown * 60) {
-            // 注意 coolDown 单位是分钟
-            // 自上次运行后还处于冷却期
+            GlobalLogger.info("Skipped by --skip-peeler argument.");
+        } else if (timeSinceLastRun <= config.getCoolDown() * 60) {
             GlobalLogger.info("====== POTATO-PEELER SKIPPED ======");
-            GlobalLogger.info("Currently in cool down period, skipped.");
+            GlobalLogger.info("Currently in cool down period (" + config.getCoolDown() + " min), skipped.");
         } else {
-            // 开始处理区块
-            if (dryRun) {
-                // 特殊标记 dryRun 的情况
-                GlobalLogger.info("====== POTATO-PEELER RUNNING (DRY-RUN) ======");
-            } else {
-                GlobalLogger.info("====== POTATO-PEELER RUNNING ======");
-            }
+            // Start processing tasks
+            GlobalLogger.info("====== POTATO-PEELER RUNNING ======");
             GlobalLogger.info("********* DO NOT INTERRUPT ********");
             if (!verboseOutput) {
-                // 提示用户可以打开细节输出
                 GlobalLogger.info("You could use '--verbose' option for more detailed information.");
             }
-            // 标记是否进行了处理
             boolean peeled = false;
-            for (int i = 0; i < worldDirPaths.size(); i++) {
-                String worldDirPath = worldDirPaths.get(i);
-                String outputDirPath = "";
-                if (!outputDirPaths.isEmpty()) {
-                    // 有指定输出路径就使用指定的输出路径
-                    outputDirPath = outputDirPaths.get(i);
+            for (PeelingTaskConfig task : config.getPeelingTasks()) {
+                GlobalLogger.info(">>> Starting task: '" + task.getName() + "' (Mode: " + task.getMode() + ") ...");
+                List<String> worldDirPaths = ArgsUtils.parseWorldDirs(task.getWorldDirs());
+                List<String> outputDirPaths = ArgsUtils.parseWorldDirs(task.getOutputDirs());
+
+                if (worldDirPaths.isEmpty()) {
+                    GlobalLogger.warning("Task '" + task.getName() + "' has no world directories specified, skipping.");
+                    continue;
                 }
-                try {
-                    GlobalLogger.info(">>> Processing '" + worldDirPath + "' ...");
-                    // 开始对这个世界执行处理
-                    PeelResult peelResult = Potato.peel(worldDirPath, outputDirPath, threadsNum, minInhabited, dryRun, config.getMinCreationHours(), false); // Default to chunk-level deletion
-                    GlobalLogger.info("=========== WORLD RESULT ============");
-                    GlobalLogger.info("World: " + worldDirPath);
-                    GlobalLogger.info("Time elapsed: " + (double) peelResult.getTimeElapsed() / 1000D + "s");
-                    GlobalLogger.info("Regions affected: " + peelResult.getRegionsAffected());
-                    GlobalLogger.info("Chunks removed: " + peelResult.getChunksRemoved());
-                    GlobalLogger.info("Size reduced: " + NumUtils.bytesToHumanReadable(peelResult.getSizeReduced()));
-                    GlobalLogger.info("=====================================");
-                    // 标记进行了处理
-                    peeled = true;
-                } catch (RegionFileNotFoundException e) {
-                    // 发生了区域文件没找到的异常，跳过
-                    GlobalLogger.warning("Regions of world: '" + worldDirPath + "' not found, skipped.");
-                } catch (IOException e) {
-                    // IO 异常
-                    GlobalLogger.warning("I/O Exception occurred while processing world: '" + worldDirPath + "', skipped the world.", e);
-                } catch (RegionTaskInterruptedException e) {
-                    // 发生了区域处理被中断的异常
-                    GlobalLogger.severe("Failed to process regions of world: '" + worldDirPath + "', interrupted.", e);
-                    // 退出程序
-                    System.exit(1);
-                } catch (Exception e) {
-                    // 到这里如果捕捉到了未知的异常，则退出程序
-                    GlobalLogger.severe("Unexpected exception!", e);
-                    // 退出程序
-                    System.exit(1);
+
+                for (int i = 0; i < worldDirPaths.size(); i++) {
+                    String worldDirPath = worldDirPaths.get(i);
+                    String outputDirPath = "";
+                    if (!outputDirPaths.isEmpty()) {
+                        outputDirPath = outputDirPaths.get(i);
+                    }
+                    try {
+                        GlobalLogger.info(">>> Processing world '" + worldDirPath + "' for task '" + task.getName() + "' ...");
+                        boolean isRegionLevelDeletionMode = "region_level_deletion".equals(task.getMode());
+                        PeelResult peelResult = Potato.peel(
+                                worldDirPath,
+                                outputDirPath,
+                                task.getThreadsNum(),
+                                task.getMinInhabited(),
+                                task.isDryRun(),
+                                task.getMinCreationHours(),
+                                isRegionLevelDeletionMode
+                        );
+                        GlobalLogger.info("=========== TASK RESULT ============");
+                        GlobalLogger.info("Task: " + task.getName());
+                        GlobalLogger.info("World: " + worldDirPath);
+                        GlobalLogger.info("Time elapsed: " + (double) peelResult.getTimeElapsed() / 1000D + "s");
+                        GlobalLogger.info("Regions affected: " + peelResult.getRegionsAffected());
+                        GlobalLogger.info("Chunks removed: " + peelResult.getChunksRemoved());
+                        GlobalLogger.info("Size reduced: " + NumUtils.bytesToHumanReadable(peelResult.getSizeReduced()));
+                        GlobalLogger.info("====================================");
+                        peeled = true;
+                    } catch (RegionFileNotFoundException e) {
+                        GlobalLogger.warning("Regions of world: '" + worldDirPath + "' not found for task '" + task.getName() + "', skipped.", e);
+                    } catch (IOException e) {
+                        GlobalLogger.warning("I/O Exception occurred while processing world: '" + worldDirPath + "' for task '" + task.getName() + "', skipped the world.", e);
+                    } catch (RegionTaskInterruptedException e) {
+                        GlobalLogger.severe("Failed to process regions of world: '" + worldDirPath + "' for task '" + task.getName() + "', interrupted.", e);
+                        System.exit(1);
+                    } catch (Exception e) {
+                        GlobalLogger.severe("Unexpected exception during task '" + task.getName() + "' for world '" + worldDirPath + "'!", e);
+                        System.exit(1);
+                    }
                 }
             }
-            // 如果有世界被处理，更新上次运行的时间
-            if (peeled)
-                TimeUtils.setLastRunTime(TimeUtils.timeNow());
-        }
+        } // Closes the 'else' block for peeling tasks
         // 处理完区块后若没有指定 server-jar 则退出
-        if (!peelerArgs.containsKey("--server-jar")) {
-            GlobalLogger.info("No --server-jar specified, exiting normally.");
+        String serverJarPath = config.getServerJar();
+        if (serverJarPath == null || serverJarPath.isEmpty()) {
+            GlobalLogger.info("No serverJar specified in configuration, exiting normally.");
             System.exit(0);
         }
         // 启动服务器前先回收没有用的资源
         System.gc();
         // 如果指定了 --server-jar，就尝试启动 Minecraft 服务器
-        String serverJarPath = peelerArgs.get("--server-jar");
         // 开启启动 Minecraft 服务器
         GlobalLogger.info("====== LAUNCHING MINECRAFT SERVER ======");
         try {
@@ -257,15 +275,17 @@ public class Main {
         System.out.println();
         System.out.println("Options:");
         System.out.println("\t--help                           Show this help message and exit.");
-        System.out.println("\t--min-inhabited <ticks>          Minimum inhabited time (in ticks) for a chunk to be considered unused. (default: 0)");
-        System.out.println("\t--cool-down <minutes>            Cooldown period (in minutes) after the last run before Potato Peeler can run again. (default: 0)");
-        System.out.println("\t--threads-num <number>           Number of worker threads to use. (default: 10)");
+        System.out.println("\t--config-file <path>             Path to the potatopeeler.yml configuration file. (default: potatopeeler.yml in current directory)");
         System.out.println("\t--max-log-size <size>            Maximum size of a single log file in bytes. (default: 2097152)");
         System.out.println("\t--retain-log-files <number>      Maximum number of log files to retain. (default: 10)");
         System.out.println("\t--verbose                        Enable verbose output.");
-        System.out.println("\t--dry-run                        Perform a dry run without modifying any files (recommended to use with --verbose).");
         System.out.println("\t--skip-peeler                    Skip the Potato Peeler process.");
         System.out.println("\t--server-jar <server.jar>        Path to the Minecraft server JAR file to launch after processing regions.");
+        System.out.println();
+        System.out.println("Configuration via potatopeeler.yml:");
+        System.out.println("\t- The tool now primarily uses 'potatopeeler.yml' for defining peeling tasks and global cooldown.");
+        System.out.println("\t- You can define multiple tasks, each with its own mode (chunk_level_deletion or region_level_deletion), minInhabited, minCreationHours, dryRun, worldDirs, outputDirs, threadsNum, and verbose settings.");
+        System.out.println("\t- A global 'coolDown' (in minutes) can be set in the YAML for the entire sequence of tasks.");
         System.out.println();
         System.out.println("List of protected chunks:");
         System.out.println("\t- In order to protect certain chunks from being removed, you can create a file named 'chunks.protected' in the world(dimension) directory, as a sibling of the directory 'region'.");
@@ -278,15 +298,14 @@ public class Main {
         System.out.println("\t- Please note that comments starting with the '#' are supported, including both single-line and inline comments.");
         System.out.println();
         System.out.println("Note:");
-        System.out.println("\t- World paths passed to '--world-dirs' and '--output-dirs' should be separated by commas.");
-        System.out.println("\t- If '--output-dirs' is not specified, the operations will be in-place.");
-        System.out.println("\t- If '--output-dirs' is specified, it must have the same number of paths as '--world-dirs'.");
-        System.out.println("\t- After the Potato Peeler process completes, the server JAR file will be launched in the current JVM. Any remaining arguments, including JVM options, will be passed to the server jar.");
+        System.out.println("\t- Command-line arguments for '--world-dirs', '--output-dirs', '--min-inhabited', '--cool-down', '--threads-num', '--dry-run' are now primarily handled within 'potatopeeler.yml' for each task.");
+        System.out.println("\t- If 'potatopeeler.yml' does not define any tasks, the tool will attempt to run a single 'chunk_level_deletion' task using command-line arguments for compatibility.");
+        System.out.println("\t- After all peeling tasks complete, the server JAR file (if specified in YAML or via --server-jar) will be launched in the current JVM. Any remaining command-line arguments will be passed to the server jar.");
         System.out.println();
-        System.out.println("Example (In-place operation):");
-        System.out.println("\tjava -Xmx4G -jar PotatoPeeler.jar --min-inhabited 50 --cool-down 60 --threads-num 5 --world-dirs 'world,world_nether,/opt/server/world_the_end' --server-jar server.jar");
+        System.out.println("Example (Using potatopeeler.yml for tasks):");
+        System.out.println("\tjava -Xmx4G -jar PotatoPeeler.jar --server-jar server.jar");
         System.out.println();
-        System.out.println("Example (Output to other directories):");
-        System.out.println("\tjava -jar PotatoPeeler.jar --world-dirs 'world,/opt/server/world_the_end' --output-dirs '/app/trimmed/world,/app/trimmed/world_the_end'");
+        System.out.println("Example (Single task via command-line for compatibility):");
+        System.out.println("\tjava -Xmx4G -jar PotatoPeeler.jar --min-inhabited 50 --cool-down 60 --threads-num 5 --world-dirs 'world' --dry-run");
     }
 }
