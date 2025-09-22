@@ -34,6 +34,10 @@ public class TaskParams {
      * 试运行选项
      */
     public boolean dryRun;
+    /**
+     * 是否是区域文件删除模式
+     */
+    public boolean isRegionLevelDeletionMode;
 
     /**
      * 构造任务参数
@@ -44,10 +48,11 @@ public class TaskParams {
      * @param worldDirPath         世界目录的路径
      * @param outputDirPath        输出的世界目录的路径, 为 null 则不指定
      */
-    public TaskParams(long minInhabited, ChunksSpatialIndex protectedChunksIndex, boolean dryRun, Path worldDirPath, Path outputDirPath) {
+    public TaskParams(long minInhabited, ChunksSpatialIndex protectedChunksIndex, boolean dryRun, Path worldDirPath, Path outputDirPath, boolean isRegionLevelDeletionMode) {
         this.minInhabited = minInhabited;
         this.protectedChunksIndex = protectedChunksIndex;
         this.dryRun = dryRun;
+        this.isRegionLevelDeletionMode = isRegionLevelDeletionMode;
         // 路径全部转换为绝对路径方便处理
         this.absWorldDirPath = worldDirPath.toAbsolutePath();
         this.absOutputDirPath = outputDirPath != null ? outputDirPath.toAbsolutePath() : null;

@@ -9,6 +9,8 @@ import indi.somebottle.exceptions.CompressionTypeUnsupportedException;
 import indi.somebottle.logger.GlobalLogger;
 import indi.somebottle.streams.ByteCountingOutputStream;
 import indi.somebottle.streams.NullOutputStream;
+import indi.somebottle.entities.TaskParams;
+import indi.somebottle.indexing.ChunksSpatialIndex;
 
 import java.io.*;
 import java.nio.file.Path;
@@ -74,7 +76,7 @@ public class RegionUtils {
      * @throws CompressionTypeUnsupportedException 如果压缩类型不支持，会抛出此异常
      * @throws RegionChunkInitializedException     如果 Chunk 被重复初始化，会抛出此异常（不应该有这种情况）
      */
-    public static Region readRegion(File regionFile) throws RegionPosNotFoundException, IOException, RegionFormatException, RegionChunkInitializedException {
+    public static Region readRegion(File regionFile, TaskParams params, boolean isRegionLevelDeletionMode) throws RegionPosNotFoundException, IOException, RegionFormatException, RegionChunkInitializedException {
         Region region = new Region(regionFile);
         GlobalLogger.fine("Reading region file: " + regionFile.getAbsolutePath());
         // regionStream 用于读取 .mca 文件头部元数据
@@ -125,11 +127,31 @@ public class RegionUtils {
                         Chunk chunk = ChunkUtils.readChunk(chunkReader, chunkOffset, sectorsOccupied, x, z, region.getRegionX(), region.getRegionZ());
                         // 初始化区域对象中的区块结构
                         region.initChunkAt(x, z, chunk);
+
+                        // If in region-level deletion mode, check if this chunk prevents region deletion
+                        if (isRegionLevelDeletionMode) {
+                            if (chunk.isOverSized() ||
+                                    params.protectedChunksIndex.contains(chunk.getGlobalX(), chunk.getGlobalZ()) ||
+                                    chunk.getInhabitedTime() > params.minInhabited) {
+                                // This chunk does not meet deletion criteria, so the region cannot be deleted
+                                region.setDeleteFlag(false);
+                                GlobalLogger.fine("Region " + regionFile.getName() + " will be kept due to chunk at (" + chunk.getGlobalX() + "," + chunk.getGlobalZ() + ").");
+                                // Break out of both loops
+                                break; // Breaks inner loop (x)
+                            }
+                        }
                     } catch (RegionFormatException e) {
                         // 在 RegionFormatException 的信息中添加 Region 信息后重新抛出
                         throw new RegionFormatException(e.getMessage() + " in Region " + regionFile.getName());
                     }
                 }
+                if (isRegionLevelDeletionMode && !region.isDeleteFlag()) {
+                    break; // Breaks outer loop (z) if region is marked to be kept
+                }
+            }
+            // If in region-level deletion mode and region is marked to be kept, skip timestamp reading
+            if (isRegionLevelDeletionMode && !region.isDeleteFlag()) {
+                return region; // Early exit
             }
             // 读取时间戳表到 Region 中
             // 紧接着的是 1024 个 4 字节大端时间戳（纪元秒）

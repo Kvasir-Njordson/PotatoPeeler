@@ -189,7 +189,7 @@ public class Main {
                 try {
                     GlobalLogger.info(">>> Processing '" + worldDirPath + "' ...");
                     // 开始对这个世界执行处理
-                    PeelResult peelResult = Potato.peel(worldDirPath, outputDirPath, threadsNum, minInhabited, dryRun, config.getMinCreationHours());
+                    PeelResult peelResult = Potato.peel(worldDirPath, outputDirPath, threadsNum, minInhabited, dryRun, config.getMinCreationHours(), false); // Default to chunk-level deletion
                     GlobalLogger.info("=========== WORLD RESULT ============");
                     GlobalLogger.info("World: " + worldDirPath);
                     GlobalLogger.info("Time elapsed: " + (double) peelResult.getTimeElapsed() / 1000D + "s");

@@ -20,6 +20,7 @@ public class InPlaceRegionTaskRunner implements RegionTaskRunner {
     private final TaskParams params; // 任务参数
     private final Queue<File> queue; // 此线程独有的任务队列
     private final PeelResult taskResult = new PeelResult(); // 存储本线程任务结果
+    private final boolean isRegionLevelDeletionMode; // 是否是区域文件删除模式
 
     /**
      * 初始化区域文件队列处理线程(原地)
@@ -30,6 +31,7 @@ public class InPlaceRegionTaskRunner implements RegionTaskRunner {
     public InPlaceRegionTaskRunner(Queue<File> queue, TaskParams params) {
         this.queue = queue;
         this.params = params;
+        this.isRegionLevelDeletionMode = params.isRegionLevelDeletionMode;
     }
 
     @Override
@@ -60,7 +62,7 @@ public class InPlaceRegionTaskRunner implements RegionTaskRunner {
             // ##############################
             Region region;
             try {
-                region = RegionUtils.readRegion(mcaFile);
+                region = RegionUtils.readRegion(mcaFile, params, isRegionLevelDeletionMode);
             } catch (Exception e) {
                 // 读取失败时检查有没有 .mca.bak 文件，如果有就尝试读取 .mca.bak
                 GlobalLogger.warning("Exception occurred while reading region file: " + mcaFile.getAbsolutePath(), e);
@@ -69,7 +71,7 @@ public class InPlaceRegionTaskRunner implements RegionTaskRunner {
                     GlobalLogger.info("Backup file found. Trying to read backup file: " + backupFile.getAbsolutePath());
                     try {
                         // 如果有的话尝试读取 .mca.bak
-                        region = RegionUtils.readRegion(backupFile);
+                        region = RegionUtils.readRegion(backupFile, params, isRegionLevelDeletionMode);
                         // dryRun 模式下不执行这个 IO 操作
                         if (!params.dryRun) {
                             // 把无法读取的 .mca 移除，然后把备份文件重命名为 .mca，方便进行后面的流程
@@ -91,6 +93,21 @@ public class InPlaceRegionTaskRunner implements RegionTaskRunner {
             // ##############################
             //           区块筛选
             // ##############################
+            // If in region-level deletion mode and the region is marked for deletion, delete the file
+            if (isRegionLevelDeletionMode && region.isDeleteFlag()) {
+                if (!params.dryRun) {
+                    try {
+                        Files.delete(originalMCAPath);
+                        GlobalLogger.info("Deleted region file: " + originalMCAPath.toAbsolutePath());
+                    } catch (IOException e) {
+                        GlobalLogger.warning("Failed to delete region file: " + originalMCAPath.toAbsolutePath(), e);
+                    }
+                } else {
+                    GlobalLogger.info("(dry-run) Would delete region file: " + originalMCAPath.toAbsolutePath());
+                }
+                regionsAffected++; // Count as affected even if deleted
+                continue; // Move to the next MCA file
+            }
             long chunksMarked = markChunksForRemoval(region, params, mcaFile.getName());
             // ##############################
             //        写入 Region 文件

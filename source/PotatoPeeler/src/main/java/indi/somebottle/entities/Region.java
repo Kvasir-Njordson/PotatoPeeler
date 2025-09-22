@@ -24,6 +24,10 @@ public class Region {
      * 存储非 null 的 Chunk 对象
      */
     private final List<Chunk> existingChunks = new ArrayList<>();
+    /**
+     * 标记是否删除这个区域文件
+     */
+    private boolean deleteFlag = true;
 
 
     public Region(File regionFile) throws RegionPosNotFoundException {
@@ -115,5 +119,23 @@ public class Region {
      */
     public void setChunkModifiedTimeAt(int x, int z, long lastModifiedTime) {
         chunkModifiedTimes[x][z] = lastModifiedTime;
+    }
+
+    /**
+     * 获得删除标记
+     *
+     * @return 是否删除这个区域文件
+     */
+    public boolean isDeleteFlag() {
+        return deleteFlag;
+    }
+
+    /**
+     * 设置删除标记
+     *
+     * @param deleteFlag 是否删除这个区域文件
+     */
+    public void setDeleteFlag(boolean deleteFlag) {
+        this.deleteFlag = deleteFlag;
     }
 }

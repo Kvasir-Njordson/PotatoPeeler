@@ -21,6 +21,7 @@ public class CopyBasedRegionTaskRunner implements RegionTaskRunner {
     private final TaskParams params; // 任务参数
     private final Queue<File> queue; // 此线程独有的任务队列
     private final PeelResult taskResult = new PeelResult(); // 存储本线程任务结果
+    private final boolean isRegionLevelDeletionMode; // 是否是区域文件删除模式
 
     /**
      * 初始化区域文件队列处理线程(非原地)
@@ -36,6 +37,7 @@ public class CopyBasedRegionTaskRunner implements RegionTaskRunner {
         }
         this.queue = queue;
         this.params = params;
+        this.isRegionLevelDeletionMode = params.isRegionLevelDeletionMode;
     }
 
     @Override
@@ -85,11 +87,26 @@ public class CopyBasedRegionTaskRunner implements RegionTaskRunner {
             // ##############################
             Region region;
             try {
-                region = RegionUtils.readRegion(mcaFile);
+                region = RegionUtils.readRegion(mcaFile, params, isRegionLevelDeletionMode);
             } catch (Exception e) {
                 // 读取失败
                 GlobalLogger.warning("Exception occurred while reading region file: " + mcaFile.getAbsolutePath(), e);
                 continue;
+            }
+            // If in region-level deletion mode and the region is marked for deletion, delete the file
+            if (isRegionLevelDeletionMode && region.isDeleteFlag()) {
+                if (!params.dryRun) {
+                    try {
+                        Files.delete(originalMCAPath);
+                        GlobalLogger.info("Deleted region file: " + originalMCAPath.toAbsolutePath());
+                    } catch (IOException e) {
+                        GlobalLogger.warning("Failed to delete region file: " + originalMCAPath.toAbsolutePath(), e);
+                    }
+                } else {
+                    GlobalLogger.info("(dry-run) Would delete region file: " + originalMCAPath.toAbsolutePath());
+                }
+                regionsAffected++; // Count as affected even if deleted
+                continue; // Move to the next MCA file
             }
             // ##############################
             //           区块筛选

@@ -1,6 +1,9 @@
 import indi.somebottle.entities.Chunk;
 import indi.somebottle.entities.Region;
 import indi.somebottle.utils.RegionUtils;
+import indi.somebottle.entities.TaskParams;
+import indi.somebottle.indexing.ChunksSpatialIndex;
+import indi.somebottle.indexing.ChunksSpatialIndexFactory;
 import org.junit.Test;
 
 import java.io.File;
@@ -13,7 +16,10 @@ public class RegionTest {
         File regionFile = new File("E:\\Projects\\TestArea\\minecraft-server\\world\\region\\r.0.0.mca");
         try {
             long startTime = System.currentTimeMillis();
-            Region region = RegionUtils.readRegion(regionFile);
+            // Create dummy TaskParams for testing purposes
+            ChunksSpatialIndex dummyIndex = ChunksSpatialIndexFactory.createRStarTreeIndex();
+            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false);
+            Region region = RegionUtils.readRegion(regionFile, dummyParams, false);
             long timeElapsed = System.currentTimeMillis() - startTime;
             System.out.println("读取耗时: " + timeElapsed + "ms");
             Chunk chunk00 = region.getChunkAt(6, 7);
@@ -30,7 +36,10 @@ public class RegionTest {
         File outputFile = new File("E:\\Projects\\TestArea\\regionFiles\\r.-1.0.mca.modified");
         try {
             long startTime = System.currentTimeMillis();
-            Region region = RegionUtils.readRegion(regionFile);
+            // Create dummy TaskParams for testing purposes
+            ChunksSpatialIndex dummyIndex = ChunksSpatialIndexFactory.createRStarTreeIndex();
+            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false);
+            Region region = RegionUtils.readRegion(regionFile, dummyParams, false);
             // 扫描区域所有现存区块，进行筛选
             List<Chunk> existingChunks = region.getExistingChunks();
             for (Chunk chunk : existingChunks) {

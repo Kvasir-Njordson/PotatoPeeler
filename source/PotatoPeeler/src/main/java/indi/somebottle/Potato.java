@@ -48,7 +48,7 @@ public class Potato {
      * @throws RegionTaskAlreadyStartedException 任务重复启动时抛出
      * @throws IOException                       读取文件时可能抛出
      */
-    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun, int minCreationHours) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
+    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun, int minCreationHours, boolean isRegionLevelDeletionMode) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
         // 先检查世界目录下的区域文件目录是否存在
         Path regionDirPath = RegionUtils.findRegionDirPath(worldPathStr);
         if (regionDirPath == null) {
@@ -109,7 +109,7 @@ public class Potato {
         }
         // 构建任务参数
         Path outputPath = outputPathStr.isEmpty() ? null : Paths.get(outputPathStr);
-        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath);
+        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath, isRegionLevelDeletionMode);
         // 创建任务调度器
         RegionTaskDispatcher dispatcher = new RegionTaskDispatcher(threadsNum, params);
         // 把文件提交给任务调度器
