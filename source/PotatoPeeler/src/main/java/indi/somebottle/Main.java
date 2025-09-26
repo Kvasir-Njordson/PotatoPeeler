@@ -122,7 +122,7 @@ public class Main {
             long coolDownArg = Long.parseLong(peelerArgs.getOrDefault("--cool-down", "0"));
             int threadsNum = Integer.parseInt(peelerArgs.getOrDefault("--threads-num", "10"));
             boolean dryRunArg = peelerArgs.containsKey("--dry-run");
-            int maxCreatedTimeArg = 0; // Default to 0 for command-line single task
+            int maxCreatedTimeArg = -1; // Default to -1 for command-line single task (no time filter)
 
             // Create a single PeelingTaskConfig from command-line args
             PeelingTaskConfig singleTask = new PeelingTaskConfig(

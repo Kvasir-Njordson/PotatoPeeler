@@ -73,8 +73,12 @@ public class Potato {
                 BasicFileAttributes attrs = Files.readAttributes(mcaFile.toPath(), BasicFileAttributes.class);
                 FileTime creationTime = attrs.creationTime();
 
-                // Only include .mca files that were created newer than maxCreatedTime ago
-                if (creationTime.compareTo(maxCreationFileTime) > 0) {
+                // If maxCreatedTime is -1, include all files (no time filter)
+                if (maxCreatedTime == -1) {
+                    filteredMcaFiles.add(mcaFile);
+                }
+                // Otherwise, only include .mca files that were created newer than maxCreatedTime ago
+                else if (creationTime.compareTo(maxCreationFileTime) > 0) {
                     filteredMcaFiles.add(mcaFile);
                 } else {
                     GlobalLogger.fine("Skipping region file " + mcaFile.getName() + " as it was created more than " + maxCreatedTime + " hours ago.");
