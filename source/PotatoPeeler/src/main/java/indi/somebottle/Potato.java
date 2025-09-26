@@ -48,7 +48,7 @@ public class Potato {
      * @throws RegionTaskAlreadyStartedException 任务重复启动时抛出
      * @throws IOException                       读取文件时可能抛出
      */
-    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun, int minCreationHours, boolean isRegionLevelDeletionMode) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
+    public static PeelResult peel(String worldPathStr, String outputPathStr, int threadsNum, long minInhabited, boolean dryRun, int maxCreatedTime, boolean isRegionLevelDeletionMode) throws RegionFileNotFoundException, RegionTaskInterruptedException, RegionTaskNotAcceptedException, RegionTaskAlreadyStartedException, IOException {
         // 先检查世界目录下的区域文件目录是否存在
         Path regionDirPath = RegionUtils.findRegionDirPath(worldPathStr);
         if (regionDirPath == null) {
@@ -56,13 +56,14 @@ public class Potato {
             throw new RegionFileNotFoundException("Can not find region directory in " + worldPathStr);
         }
 
-        // Calculate the cutoff time for creation (minCreationHours ago)
-        Instant minCreationInstant = Instant.now().minus(minCreationHours, ChronoUnit.HOURS);
-        FileTime minCreationFileTime = FileTime.from(minCreationInstant);
+        // Calculate the cutoff time for creation (maxCreatedTime ago)
+        Instant maxCreationInstant = Instant.now().minus(maxCreatedTime, ChronoUnit.HOURS);
+        FileTime maxCreationFileTime = FileTime.from(maxCreationInstant);
 
         // Scan for .mca files, now including a check for creation time
         File[] allMcaFilesInDir = regionDirPath.toFile().listFiles(file -> file.getName().endsWith(".mca"));
-        if (allMcaFilesInDir == null || allMcaFilesInDir.length == 0) {
+        long totalRegionFilesCount = (allMcaFilesInDir != null) ? allMcaFilesInDir.length : 0;
+        if (totalRegionFilesCount == 0) {
             throw new RegionFileNotFoundException("Can not find .mca files in " + regionDirPath);
         }
 
@@ -72,11 +73,11 @@ public class Potato {
                 BasicFileAttributes attrs = Files.readAttributes(mcaFile.toPath(), BasicFileAttributes.class);
                 FileTime creationTime = attrs.creationTime();
 
-                // Only include .mca files that were created more than minCreationHours ago
-                if (creationTime.compareTo(minCreationFileTime) < 0) {
+                // Only include .mca files that were created newer than maxCreatedTime ago
+                if (creationTime.compareTo(maxCreationFileTime) > 0) {
                     filteredMcaFiles.add(mcaFile);
                 } else {
-                    GlobalLogger.fine("Skipping region file " + mcaFile.getName() + " as it was created within the last " + minCreationHours + " hours.");
+                    GlobalLogger.fine("Skipping region file " + mcaFile.getName() + " as it was created more than " + maxCreatedTime + " hours ago.");
                 }
             } catch (IOException e) {
                 GlobalLogger.warning("Could not read file attributes for " + mcaFile.getAbsolutePath() + ", skipping.", e);
@@ -86,7 +87,7 @@ public class Potato {
         File[] mcaFiles = filteredMcaFiles.toArray(new File[0]);
 
         if (mcaFiles.length == 0) {
-            throw new RegionFileNotFoundException("No .mca files found in " + regionDirPath + " that were created more than " + minCreationHours + " hours ago.");
+            throw new RegionFileNotFoundException("No .mca files found in " + regionDirPath + " that were created newer than " + maxCreatedTime + " hours ago.");
         }
         // 找到世界维度根目录下的受保护区块清单
         Path protectedChunksListPath = regionDirPath.resolveSibling(PROTECTED_CHUNKS_LIST_FILENAME);
@@ -109,7 +110,7 @@ public class Potato {
         }
         // 构建任务参数
         Path outputPath = outputPathStr.isEmpty() ? null : Paths.get(outputPathStr);
-        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath, isRegionLevelDeletionMode);
+        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath, isRegionLevelDeletionMode, totalRegionFilesCount, maxCreatedTime);
         // 创建任务调度器
         RegionTaskDispatcher dispatcher = new RegionTaskDispatcher(threadsNum, params);
         // 把文件提交给任务调度器

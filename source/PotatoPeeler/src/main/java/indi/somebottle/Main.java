@@ -122,14 +122,14 @@ public class Main {
             long coolDownArg = Long.parseLong(peelerArgs.getOrDefault("--cool-down", "0"));
             int threadsNum = Integer.parseInt(peelerArgs.getOrDefault("--threads-num", "10"));
             boolean dryRunArg = peelerArgs.containsKey("--dry-run");
-            int minCreationHoursArg = 0; // Default to 0 for command-line single task
+            int maxCreatedTimeArg = 0; // Default to 0 for command-line single task
 
             // Create a single PeelingTaskConfig from command-line args
             PeelingTaskConfig singleTask = new PeelingTaskConfig(
                     "Default Command-Line Task",
                     "chunk_level_deletion", // Default mode for command-line
                     minInhabited,
-                    minCreationHoursArg,
+                    maxCreatedTimeArg,
                     dryRunArg,
                     peelerArgs.get("--world-dirs"),
                     peelerArgs.get("--output-dirs"),
@@ -213,20 +213,41 @@ public class Main {
                                 task.getThreadsNum(),
                                 task.getMinInhabited(),
                                 task.isDryRun(),
-                                task.getMinCreationHours(),
+                                task.getMaxCreatedTime(),
                                 isRegionLevelDeletionMode
                         );
                         GlobalLogger.info("=========== TASK RESULT ============");
                         GlobalLogger.info("Task: " + task.getName());
                         GlobalLogger.info("World: " + worldDirPath);
                         GlobalLogger.info("Time elapsed: " + (double) peelResult.getTimeElapsed() / 1000D + "s");
-                        GlobalLogger.info("Regions affected: " + peelResult.getRegionsAffected());
-                        GlobalLogger.info("Chunks removed: " + peelResult.getChunksRemoved());
+                        GlobalLogger.info("Total region files checked: " + peelResult.getTotalRegionFilesChecked());
+                        if ("region_level_deletion".equals(task.getMode())) {
+                            GlobalLogger.info("Region files deleted: " + peelResult.getRegionsAffected());
+                        } else { // chunk_level_deletion mode
+                            GlobalLogger.info("Regions affected: " + peelResult.getRegionsAffected());
+                            GlobalLogger.info("Chunks removed: " + peelResult.getChunksRemoved());
+                        }
                         GlobalLogger.info("Size reduced: " + NumUtils.bytesToHumanReadable(peelResult.getSizeReduced()));
                         GlobalLogger.info("====================================");
                         peeled = true;
                     } catch (RegionFileNotFoundException e) {
-                        GlobalLogger.warning("Regions of world: '" + worldDirPath + "' not found for task '" + task.getName() + "', skipped.", e);
+                        GlobalLogger.warning("Regions of world: '" + worldDirPath + "' not found for task '" + task.getName() + "', skipped.");
+                        // Create an empty PeelResult to show 0 files adjusted
+                        PeelResult emptyPeelResult = new PeelResult();
+                        emptyPeelResult.setTotalRegionFilesChecked(0); // Set to 0 for empty result
+                        GlobalLogger.info("=========== TASK RESULT ============");
+                        GlobalLogger.info("Task: " + task.getName());
+                        GlobalLogger.info("World: " + worldDirPath);
+                        GlobalLogger.info("Time elapsed: " + (double) emptyPeelResult.getTimeElapsed() / 1000D + "s");
+                        GlobalLogger.info("Total region files checked: " + emptyPeelResult.getTotalRegionFilesChecked());
+                        if ("region_level_deletion".equals(task.getMode())) {
+                            GlobalLogger.info("Region files deleted: " + emptyPeelResult.getRegionsAffected());
+                        } else { // chunk_level_deletion mode
+                            GlobalLogger.info("Regions affected: " + emptyPeelResult.getRegionsAffected());
+                            GlobalLogger.info("Chunks removed: " + emptyPeelResult.getChunksRemoved());
+                        }
+                        GlobalLogger.info("Size reduced: " + NumUtils.bytesToHumanReadable(emptyPeelResult.getSizeReduced()));
+                        GlobalLogger.info("====================================");
                     } catch (IOException e) {
                         GlobalLogger.warning("I/O Exception occurred while processing world: '" + worldDirPath + "' for task '" + task.getName() + "', skipped the world.", e);
                     } catch (RegionTaskInterruptedException e) {

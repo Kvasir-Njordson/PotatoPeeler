@@ -18,7 +18,7 @@ public class RegionTest {
             long startTime = System.currentTimeMillis();
             // Create dummy TaskParams for testing purposes
             ChunksSpatialIndex dummyIndex = ChunksSpatialIndexFactory.createRStarTreeIndex();
-            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false);
+            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false, 0L, 0);
             Region region = RegionUtils.readRegion(regionFile, dummyParams, false);
             long timeElapsed = System.currentTimeMillis() - startTime;
             System.out.println("读取耗时: " + timeElapsed + "ms");
@@ -38,7 +38,7 @@ public class RegionTest {
             long startTime = System.currentTimeMillis();
             // Create dummy TaskParams for testing purposes
             ChunksSpatialIndex dummyIndex = ChunksSpatialIndexFactory.createRStarTreeIndex();
-            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false);
+            TaskParams dummyParams = new TaskParams(0, dummyIndex, false, regionFile.toPath().getParent().getParent(), null, false, 0L, 0);
             Region region = RegionUtils.readRegion(regionFile, dummyParams, false);
             // 扫描区域所有现存区块，进行筛选
             List<Chunk> existingChunks = region.getExistingChunks();

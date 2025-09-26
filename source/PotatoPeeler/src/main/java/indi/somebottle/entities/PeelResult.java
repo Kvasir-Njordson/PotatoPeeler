@@ -9,12 +9,15 @@ public class PeelResult {
     private long regionsAffected;
     // 耗时（单位：ms）
     private long timeElapsed;
+    // 检查的区域文件总数
+    private long totalRegionFilesChecked;
 
     public PeelResult() {
         sizeReduced = 0;
         chunksRemoved = 0;
         regionsAffected = 0;
         timeElapsed = 0;
+        totalRegionFilesChecked = 0;
     }
 
     public long getSizeReduced() {
@@ -59,6 +62,14 @@ public class PeelResult {
         this.timeElapsed = timeElapsed;
     }
 
+    public long getTotalRegionFilesChecked() {
+        return totalRegionFilesChecked;
+    }
+
+    public void setTotalRegionFilesChecked(long totalRegionFilesChecked) {
+        this.totalRegionFilesChecked = totalRegionFilesChecked;
+    }
+
     /**
      * 把另一个 PeelResult 的结果加到本对象中 <br>
      * timeElapsed 不参与此方法的运算，因为计算时间时往往不是简单的叠加。
@@ -69,5 +80,6 @@ public class PeelResult {
         this.sizeReduced += another.sizeReduced;
         this.chunksRemoved += another.chunksRemoved;
         this.regionsAffected += another.regionsAffected;
+        this.totalRegionFilesChecked += another.totalRegionFilesChecked;
     }
 }

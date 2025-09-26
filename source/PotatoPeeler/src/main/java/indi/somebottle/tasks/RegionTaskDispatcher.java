@@ -31,10 +31,13 @@ public class RegionTaskDispatcher {
     private int enqueueIndex = 0;
     // 标记是否已经开始运行任务
     private boolean started = false;
+    // 检查的区域文件总数
+    private final long totalRegionFilesChecked;
 
     public RegionTaskDispatcher(int threadsNum, TaskParams params) {
         this.threadsNum = threadsNum;
         this.taskParams = params;
+        this.totalRegionFilesChecked = params.totalRegionFilesChecked;
         // 指定线程数初始化线程池
         this.executor = Executors.newFixedThreadPool(threadsNum);
         // 为每个线程都初始化一个队列
@@ -109,6 +112,7 @@ public class RegionTaskDispatcher {
                 res.setTimeElapsed(runnerRes.getTimeElapsed());
             }
         }
+        res.setTotalRegionFilesChecked(this.totalRegionFilesChecked);
         return res;
     }
 
