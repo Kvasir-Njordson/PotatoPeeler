@@ -114,7 +114,7 @@ public class Potato {
         }
         // 构建任务参数
         Path outputPath = outputPathStr.isEmpty() ? null : Paths.get(outputPathStr);
-        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath, isRegionLevelDeletionMode, totalRegionFilesCount, maxCreatedTime);
+        TaskParams params = new TaskParams(minInhabited, protectedChunksIndex, dryRun, Paths.get(worldPathStr), outputPath, isRegionLevelDeletionMode, mcaFiles.length, maxCreatedTime);
         // 创建任务调度器
         RegionTaskDispatcher dispatcher = new RegionTaskDispatcher(threadsNum, params);
         // 把文件提交给任务调度器
